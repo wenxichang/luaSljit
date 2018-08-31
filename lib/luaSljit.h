@@ -53,6 +53,6 @@ struct sljit_label    *luaSljit_tolabel(lua_State *, int);
  */
 struct sljit_compiler *luaSljit_get_compiler(lua_State *, int);
 
-void *luaSljit_tocode(lua_State *, int);
+void *luaSljit_tocode(lua_State *, int, size_t *);
 
 #endif

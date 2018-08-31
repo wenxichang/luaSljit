@@ -47,8 +47,8 @@ l_call(lua_State *L)
 	sljit_sw (*call3)(sljit_sw, sljit_sw, sljit_sw);
 	sljit_sw res = 0;
 	int i, nargs;
-
-	code = luaSljit_tocode(L, 1);
+	
+	code = luaSljit_tocode(L, 1, NULL);
 
 	nargs = lua_gettop(L) - 1;
 	if (nargs > 3)
@@ -98,8 +98,30 @@ l_call(lua_State *L)
 	return 1;
 }
 
+static int l_disassemble(lua_State *L)
+{
+	size_t size;
+	void *code = luaSljit_tocode(L, 1, &size);
+	
+	FILE *fp = fopen("/tmp/slj_dump", "wb");
+	if (!fp)
+		return 0;
+	
+	fwrite(code, size, 1, fp);
+	fclose(fp);
+
+#if defined(SLJIT_CONFIG_X86_64)
+	system("objdump -b binary -m l1om -D /tmp/slj_dump");
+#elif defined(SLJIT_CONFIG_X86_32)
+	system("objdump -b binary -m i386 -D /tmp/slj_dump");
+#endif
+
+	return 0;
+}
+
 static luaL_Reg jicall_functions[] = {
-	{ "call",  l_call },
+	{ "call",        l_call },
+	{ "disassemble", l_disassemble },
 	// XXX fcall?
 	{ NULL, NULL }
 };

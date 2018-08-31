@@ -42,6 +42,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* Metatables. */
 #define CODE_METATABLE  "sljit.code"
@@ -88,7 +89,7 @@ typedef int constant_flag_t;
 struct luaSljitArg
 {
 	constant_flag_t flags;
-	sljit_si argi; // src, dst or op
+	sljit_s32 argi; // src, dst or op
 	sljit_sw argw; // srcw or dstw
 };
 
@@ -105,6 +106,14 @@ static const struct constant constants[] = {
 	/* XXX more of these */
 	DEFCONST(NUMBER_OF_REGISTERS,       TYPE_NOTUD),
 	DEFCONST(NUMBER_OF_SAVED_REGISTERS, TYPE_NOTUD),
+	DEFCONST(HAS_FPU,                   TYPE_NOTUD),
+	DEFCONST(HAS_VIRTUAL_REGISTERS,     TYPE_NOTUD),
+	DEFCONST(HAS_CLZ,                   TYPE_NOTUD),
+	DEFCONST(HAS_CMOV,                  TYPE_NOTUD),
+
+#if (defined SLJIT_CONFIG_X86 && SLJIT_CONFIG_X86)
+	DEFCONST(HAS_SSE2,                  TYPE_NOTUD),
+#endif
 
 	/* General purpose registers. */
 	/* XXX PREF_SHIFT_REG R2, RETURN_REG R0 */
@@ -138,104 +147,95 @@ static const struct constant constants[] = {
 	/* sljit_emit_op0. */
 	DEFCONST(BREAKPOINT, TYPE_OP0),
 	DEFCONST(NOP,        TYPE_OP0),
-	DEFCONST(LUMUL,      TYPE_OP0),
-	DEFCONST(LSMUL,      TYPE_OP0),
-	DEFCONST(LUDIV,      TYPE_OP0),
-	DEFCONST(ILUDIV,     TYPE_OP0),
-	DEFCONST(LSDIV,      TYPE_OP0),
-	DEFCONST(ILSDIV,     TYPE_OP0),
-
+	DEFCONST(LMUL_UW,    TYPE_OP0),
+	DEFCONST(LMUL_SW,    TYPE_OP0),
+	DEFCONST(DIVMOD_UW,  TYPE_OP0),
+	DEFCONST(DIVMOD_U32, TYPE_OP0),
+	DEFCONST(DIVMOD_SW,  TYPE_OP0),
+	DEFCONST(DIVMOD_S32, TYPE_OP0),
+	DEFCONST(DIV_UW,     TYPE_OP0),
+	DEFCONST(DIV_U32,    TYPE_OP0),
+	DEFCONST(DIV_SW,     TYPE_OP0),
+	DEFCONST(DIV_S32,    TYPE_OP0),
+	
 	/* sljit_emit_op1. */
 	DEFCONST(MOV,      TYPE_OP1|OP1_RET),
-	DEFCONST(MOV_UB,   TYPE_OP1|OP1_RET),
-	DEFCONST(IMOV_UB,  TYPE_OP1|OP1_RET),
-	DEFCONST(MOV_SB,   TYPE_OP1|OP1_RET),
-	DEFCONST(IMOV_SB,  TYPE_OP1|OP1_RET),
-	DEFCONST(MOV_UH,   TYPE_OP1|OP1_RET),
-	DEFCONST(IMOV_UH,  TYPE_OP1|OP1_RET),
-	DEFCONST(MOV_SH,   TYPE_OP1|OP1_RET),
-	DEFCONST(IMOV_SH,  TYPE_OP1|OP1_RET),
-	DEFCONST(MOV_UI,   TYPE_OP1|OP1_RET),
-	DEFCONST(MOV_SI,   TYPE_OP1|OP1_RET),
-	DEFCONST(IMOV,     TYPE_OP1|OP1_RET),
+	DEFCONST(MOV_U8,   TYPE_OP1|OP1_RET),
+	DEFCONST(MOV32_U8, TYPE_OP1|OP1_RET),
+	DEFCONST(MOV_S8,   TYPE_OP1|OP1_RET),
+	DEFCONST(MOV32_S8, TYPE_OP1|OP1_RET),
+	DEFCONST(MOV_U16,  TYPE_OP1|OP1_RET),
+	DEFCONST(MOV32_U16,TYPE_OP1|OP1_RET),
+	DEFCONST(MOV_S16,  TYPE_OP1|OP1_RET),
+	DEFCONST(MOV32_S16,TYPE_OP1|OP1_RET),
+	DEFCONST(MOV_U32,  TYPE_OP1|OP1_RET),
+	DEFCONST(MOV_S32,  TYPE_OP1|OP1_RET),
+	DEFCONST(MOV32,    TYPE_OP1|OP1_RET),
 	DEFCONST(MOV_P,    TYPE_OP1|OP1_RET),
-	DEFCONST(MOVU,     TYPE_OP1),
-	DEFCONST(MOVU_UB,  TYPE_OP1),
-	DEFCONST(IMOVU_UB, TYPE_OP1),
-	DEFCONST(MOVU_SB,  TYPE_OP1),
-	DEFCONST(IMOVU_SB, TYPE_OP1),
-	DEFCONST(MOVU_UH,  TYPE_OP1),
-	DEFCONST(IMOVU_UH, TYPE_OP1),
-	DEFCONST(MOVU_SH,  TYPE_OP1),
-	DEFCONST(IMOVU_SH, TYPE_OP1),
-	DEFCONST(MOVU_UI,  TYPE_OP1),
-	DEFCONST(MOVU_SI,  TYPE_OP1),
-	DEFCONST(IMOVU,    TYPE_OP1),
-	DEFCONST(MOVU_P,   TYPE_OP1),
 	DEFCONST(NOT,      TYPE_OP1),
-	DEFCONST(INOT,     TYPE_OP1),
+	DEFCONST(NOT32,    TYPE_OP1),
 	DEFCONST(NEG,      TYPE_OP1),
-	DEFCONST(INEG,     TYPE_OP1),
+	DEFCONST(NEG32,    TYPE_OP1),
 	DEFCONST(CLZ,      TYPE_OP1),
-	DEFCONST(ICLZ,     TYPE_OP1),
+	DEFCONST(CLZ32,    TYPE_OP1),
 
 	/* sljit_emit_op2. */
 	DEFCONST(ADD,   TYPE_OP2),
-	DEFCONST(IADD,  TYPE_OP2),
+	DEFCONST(ADD32, TYPE_OP2),
 	DEFCONST(ADDC,  TYPE_OP2),
-	DEFCONST(IADDC, TYPE_OP2),
+	DEFCONST(ADDC32,TYPE_OP2),
 	DEFCONST(SUB,   TYPE_OP2),
-	DEFCONST(ISUB,  TYPE_OP2),
+	DEFCONST(SUB32, TYPE_OP2),
 	DEFCONST(SUBC,  TYPE_OP2),
-	DEFCONST(ISUBC, TYPE_OP2),
+	DEFCONST(SUBC32,TYPE_OP2),
 	DEFCONST(MUL,   TYPE_OP2),
-	DEFCONST(IMUL,  TYPE_OP2),
+	DEFCONST(MUL32, TYPE_OP2),
 	DEFCONST(AND,   TYPE_OP2),
-	DEFCONST(IAND,  TYPE_OP2),
+	DEFCONST(AND32, TYPE_OP2),
 	DEFCONST(OR,    TYPE_OP2),
-	DEFCONST(IOR,   TYPE_OP2),
+	DEFCONST(OR32,  TYPE_OP2),
 	DEFCONST(XOR,   TYPE_OP2),
-	DEFCONST(IXOR,  TYPE_OP2),
+	DEFCONST(XOR32, TYPE_OP2),
 	DEFCONST(SHL,   TYPE_OP2),
-	DEFCONST(ISHL,  TYPE_OP2),
+	DEFCONST(SHL32, TYPE_OP2),
 	DEFCONST(LSHR,  TYPE_OP2),
-	DEFCONST(ILSHR, TYPE_OP2),
+	DEFCONST(LSHR32,TYPE_OP2),
 	DEFCONST(ASHR,  TYPE_OP2),
-	DEFCONST(IASHR, TYPE_OP2),
+	DEFCONST(ASHR32,TYPE_OP2),
 
 	/* TYPE_CMP constants. */
 	DEFCONST(EQUAL,               TYPE_CMP|CMP_JMP),
-	DEFCONST(I_EQUAL,             TYPE_CMP|CMP_JMP),
+	DEFCONST(EQUAL32,             TYPE_CMP|CMP_JMP),
 	DEFCONST(ZERO,                TYPE_CMP|CMP_JMP),
-	DEFCONST(I_ZERO,              TYPE_CMP|CMP_JMP),
+	DEFCONST(ZERO32,              TYPE_CMP|CMP_JMP),
 	DEFCONST(NOT_EQUAL,           TYPE_CMP|CMP_JMP),
-	DEFCONST(I_NOT_EQUAL,         TYPE_CMP|CMP_JMP),
+	DEFCONST(NOT_EQUAL32,         TYPE_CMP|CMP_JMP),
 	DEFCONST(NOT_ZERO,            TYPE_CMP|CMP_JMP),
-	DEFCONST(I_NOT_ZERO,          TYPE_CMP|CMP_JMP),
+	DEFCONST(NOT_ZERO32,          TYPE_CMP|CMP_JMP),
 	DEFCONST(LESS,                TYPE_CMP|CMP_JMP),
-	DEFCONST(I_LESS,              TYPE_CMP|CMP_JMP),
+	DEFCONST(LESS32,              TYPE_CMP|CMP_JMP),
 	DEFCONST(GREATER_EQUAL,       TYPE_CMP|CMP_JMP),
-	DEFCONST(I_GREATER_EQUAL,     TYPE_CMP|CMP_JMP),
+	DEFCONST(GREATER_EQUAL32,     TYPE_CMP|CMP_JMP),
 	DEFCONST(GREATER,             TYPE_CMP|CMP_JMP),
-	DEFCONST(I_GREATER,           TYPE_CMP|CMP_JMP),
+	DEFCONST(GREATER32,           TYPE_CMP|CMP_JMP),
 	DEFCONST(LESS_EQUAL,          TYPE_CMP|CMP_JMP),
-	DEFCONST(I_LESS_EQUAL,        TYPE_CMP|CMP_JMP),
+	DEFCONST(LESS_EQUAL32,        TYPE_CMP|CMP_JMP),
 	DEFCONST(SIG_LESS,            TYPE_CMP|CMP_JMP),
-	DEFCONST(I_SIG_LESS,          TYPE_CMP|CMP_JMP),
+	DEFCONST(SIG_LESS32,          TYPE_CMP|CMP_JMP),
 	DEFCONST(SIG_GREATER_EQUAL,   TYPE_CMP|CMP_JMP),
-	DEFCONST(I_SIG_GREATER_EQUAL, TYPE_CMP|CMP_JMP),
+	DEFCONST(SIG_GREATER_EQUAL32, TYPE_CMP|CMP_JMP),
 	DEFCONST(SIG_GREATER,         TYPE_CMP|CMP_JMP),
-	DEFCONST(I_SIG_GREATER,       TYPE_CMP|CMP_JMP),
+	DEFCONST(SIG_GREATER32,       TYPE_CMP|CMP_JMP),
 	DEFCONST(SIG_LESS_EQUAL,      TYPE_CMP|CMP_JMP),
-	DEFCONST(I_SIG_LESS_EQUAL,    TYPE_CMP|CMP_JMP),
+	DEFCONST(SIG_LESS_EQUAL32,    TYPE_CMP|CMP_JMP),
 	DEFCONST(OVERFLOW,            TYPE_CMP),
-	DEFCONST(I_OVERFLOW,          TYPE_CMP),
+	DEFCONST(OVERFLOW32,          TYPE_CMP),
 	DEFCONST(NOT_OVERFLOW,        TYPE_CMP),
-	DEFCONST(I_NOT_OVERFLOW,      TYPE_CMP),
+	DEFCONST(NOT_OVERFLOW32,      TYPE_CMP),
 	DEFCONST(MUL_OVERFLOW,        TYPE_CMP),
-	DEFCONST(I_MUL_OVERFLOW,      TYPE_CMP),
+	DEFCONST(MUL_OVERFLOW32,      TYPE_CMP),
 	DEFCONST(MUL_NOT_OVERFLOW,    TYPE_CMP),
-	DEFCONST(I_MUL_NOT_OVERFLOW,  TYPE_CMP),
+	DEFCONST(MUL_NOT_OVERFLOW32,  TYPE_CMP),
 };
 
 /* sljit_compiler userdata. */
@@ -266,6 +266,7 @@ struct luaSljitConst
 struct luaSljitCode
 {
 	void *code;
+	sljit_uw size;
 };
 
 static void *
@@ -451,7 +452,7 @@ toarg(lua_State *L, int narg, const char *type, int flags,
 }
 
 static void
-checkreg(lua_State *L, int narg, int flags, sljit_si *regi, sljit_sw *regw)
+checkreg(lua_State *L, int narg, int flags, sljit_s32 *regi, sljit_sw *regw)
 {
 	struct luaSljitArg arg;
 
@@ -683,10 +684,11 @@ l_unaligned(lua_State *L)
 }
 
 static int
-l_is_fpu_available(lua_State *L)
+l_has_cpu_feature(lua_State *L)
 {
-
-	lua_pushboolean(L, sljit_is_fpu_available());
+	sljit_s32 feature_type = luaL_checkinteger(L, 1);
+	
+	lua_pushboolean(L, sljit_has_cpu_feature(feature_type));
 
 	return 1;
 }
@@ -721,6 +723,10 @@ l_create_compiler(lua_State *L)
 
 	if (udata->compiler == NULL)
 		return luaL_error(L, "sljit.create_compiler() failed");
+
+#if (defined SLJIT_VERBOSE && SLJIT_VERBOSE)
+	sljit_compiler_verbose(udata->compiler, stderr);
+#endif
 
 	return 1;
 }
@@ -763,6 +769,18 @@ gc_code(lua_State *L)
 	lua_setmetatable(L, 1);
 
 	return 0;
+}
+
+static int
+code_size(lua_State *L)
+{
+	struct luaSljitCode *udata;
+
+	udata = (struct luaSljitCode *)
+	    luaL_checkudata(L, 1, CODE_METATABLE);
+	
+	lua_pushinteger(L, udata->size);
+	return 1;
 }
 
 static int
@@ -943,15 +961,15 @@ static int
 l_emit_enter(lua_State *L)
 {
 	struct luaSljitCompiler *comp;
-	sljit_si options, args, scratches, saveds;
-	sljit_si fscratches, fsaveds, local_size;
+	sljit_s32 options, arg_types, scratches, saveds;
+	sljit_s32 fscratches, fsaveds, local_size;
 	int status;
 
 	comp = checkcompiler(L, 1);
 
 	if (lua_type(L, 2) != LUA_TTABLE) {
 		options    = luaL_checkinteger(L, 2);
-		args       = luaL_checkinteger(L, 3);
+		arg_types  = luaL_checkinteger(L, 3);
 		scratches  = luaL_checkinteger(L, 4);
 		saveds     = luaL_checkinteger(L, 5);
 		fscratches = luaL_checkinteger(L, 6);
@@ -959,7 +977,7 @@ l_emit_enter(lua_State *L)
 		local_size = luaL_checkinteger(L, 8);
 	} else {
 		options    = getiarg(L, 2, "options", 0);
-		args       = getiarg(L, 2, "args", 0);
+		arg_types  = getiarg(L, 2, "arg_types", 0);
 		scratches  = getiarg(L, 2, "scratches", 0);
 		saveds     = getiarg(L, 2, "saveds", 0);
 		fscratches = getiarg(L, 2, "fscratches", 0);
@@ -967,7 +985,7 @@ l_emit_enter(lua_State *L)
 		local_size = getiarg(L, 2, "local_size", 0);
 	}
 
-	status = sljit_emit_enter(comp->compiler, options, args,
+	status = sljit_emit_enter(comp->compiler, options, arg_types,
 	    scratches, saveds, fscratches, fsaveds, local_size);
 	if (status != SLJIT_SUCCESS)
 		return compiler_error(L, "sljit_emit_enter", status);
@@ -1000,7 +1018,7 @@ l_emit_op1(lua_State *L)
 	struct luaSljitCompiler *comp;
 	struct luaSljitArg op;
 	sljit_sw dstw, srcw;
-	sljit_si dst, src;
+	sljit_s32 dst, src;
 	int status;
 
 	comp = checkcompiler(L, 1);
@@ -1022,7 +1040,7 @@ l_emit_op2(lua_State *L)
 	struct luaSljitCompiler *comp;
 	struct luaSljitArg op;
 	sljit_sw dstw, src1w, src2w;
-	sljit_si dst, src1, src2;
+	sljit_s32 dst, src1, src2;
 	int status;
 
 	comp = checkcompiler(L, 1);
@@ -1046,7 +1064,7 @@ l_emit_return(lua_State *L)
 	struct luaSljitCompiler *comp;
 	struct luaSljitArg op;
 	sljit_sw srcw;
-	sljit_si src;
+	sljit_s32 src;
 	int status;
 
 	comp = checkcompiler(L, 1);
@@ -1067,7 +1085,7 @@ l_emit_fast_enter(lua_State *L)
 {
 	struct luaSljitCompiler *comp;
 	sljit_sw dstw;
-	sljit_si dst;
+	sljit_s32 dst;
 	int status;
 
 	comp = checkcompiler(L, 1);
@@ -1086,7 +1104,7 @@ l_emit_fast_return(lua_State *L)
 {
 	struct luaSljitCompiler *comp;
 	sljit_sw srcw;
-	sljit_si src;
+	sljit_s32 src;
 	int status;
 
 	comp = checkcompiler(L, 1);
@@ -1105,7 +1123,7 @@ l_get_local_base(lua_State *L)
 {
 	struct luaSljitCompiler *comp;
 	sljit_sw dstw, offset;
-	sljit_si dst;
+	sljit_s32 dst;
 	int status;
 
 	comp = checkcompiler(L, 1);
@@ -1189,7 +1207,7 @@ l_emit_cmp(lua_State *L)
 	struct luaSljitJump *udata;
 	struct luaSljitArg type;
 	sljit_sw src1w, src2w;
-	sljit_si src1, src2;
+	sljit_s32 src1, src2;
 
 	comp = checkcompiler(L, 1);
 	toarg(L, 2, "comparison", CMP_JMP, &type);
@@ -1226,7 +1244,7 @@ l_emit_const(lua_State *L)
 	struct luaSljitCompiler *comp;
 	struct luaSljitConst *udata;
 	sljit_sw initval, dstw;
-	sljit_si dst;
+	sljit_s32 dst;
 
 	comp = checkcompiler(L, 1);
 	checkreg(L, 2, REG_ONLY, &dst, &dstw);
@@ -1322,6 +1340,62 @@ l_generate_code(lua_State *L)
 	if (udata->code == NULL)
 		return luaL_error(L, "sljit.generate_code() failed");
 
+	udata->size = sljit_get_generated_code_size(comp->compiler);
+	return 1;
+}
+
+static int
+checkargtypes(lua_State *L, int idx)
+{
+	const char *t = luaL_checkstring(L, idx);
+	struct typev {
+		const char *type;
+		int v;
+	} types[] = {
+		{ "VOID",   SLJIT_ARG_TYPE_VOID },
+		{ "SW",     SLJIT_ARG_TYPE_SW },
+		{ "UW",     SLJIT_ARG_TYPE_UW },
+		{ "S32",    SLJIT_ARG_TYPE_S32 },
+		{ "U32",    SLJIT_ARG_TYPE_U32 },
+		{ "F32",    SLJIT_ARG_TYPE_F32 },
+		{ "F64",    SLJIT_ARG_TYPE_F64 },
+	};
+	int i;
+	for (i = 0; i < sizeof(types) / sizeof(types[0]); ++i) {
+		if (strcmp(types[i].type, t) == 0)
+			return types[i].v;
+	}
+	
+	luaL_error(L, "sljit.declare(), invalid type string");
+	return 0;
+}
+
+static int
+l_declare(lua_State *L)
+{
+	int narg = lua_gettop(L);
+	int val = 0;
+	
+	if (narg < 1 || narg > 5)
+		luaL_error(L, "sljit.declare() failed, too many arguments");
+	
+	switch (narg) {
+	case 5:
+		val |= SLJIT_DEF_ARG4(checkargtypes(L, 5));
+	case 4:
+		val |= SLJIT_DEF_ARG3(checkargtypes(L, 4));
+	case 3:
+		val |= SLJIT_DEF_ARG2(checkargtypes(L, 3));
+	case 2:
+		val |= SLJIT_DEF_ARG1(checkargtypes(L, 2));
+	case 1:
+		val |= SLJIT_DEF_RET(checkargtypes(L, 1));
+		break;
+	default:
+		assert(0 && "sljit.declare: narg error");
+	}
+	
+	lua_pushinteger(L, val);
 	return 1;
 }
 
@@ -1363,6 +1437,7 @@ static luaL_Reg arg_metafunctions[] = {
 };
 
 static luaL_Reg code_methods[] = {
+	{ "size",       code_size },
 	{ NULL, NULL }
 };
 
@@ -1385,12 +1460,13 @@ static luaL_Reg label_methods[] = {
 static luaL_Reg sljit_functions[] = {
 	{ "word_width",       l_word_width       },
 	{ "create_compiler",  l_create_compiler  },
-	{ "is_fpu_available", l_is_fpu_available },
+	{ "has_cpu_feature",  l_has_cpu_feature  },
 	{ "imm",              l_imm              },
 	{ "mem0",             l_mem0             },
 	{ "mem1",             l_mem1             },
 	{ "mem2",             l_mem2             },
 	{ "unaligned",        l_unaligned        },
+	{ "declare",          l_declare          },
 	{ NULL, NULL }
 };
 
@@ -1515,11 +1591,14 @@ luaSljit_tocompiler(lua_State *L, int narg)
 }
 
 void *
-luaSljit_tocode(lua_State *L, int narg)
+luaSljit_tocode(lua_State *L, int narg, size_t *size)
 {
 	struct luaSljitCode *ud;
 
 	ud = (struct luaSljitCode *)testudata(L, narg, CODE_METATABLE);
+	if (size && ud)
+		*size = ud->size;
+	
 	return (ud != NULL) ? ud->code : NULL;
 }
 
