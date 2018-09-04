@@ -1352,7 +1352,6 @@ checkargtypes(lua_State *L, int idx)
 		const char *type;
 		int v;
 	} types[] = {
-		{ "VOID",   SLJIT_ARG_TYPE_VOID },
 		{ "SW",     SLJIT_ARG_TYPE_SW },
 		{ "UW",     SLJIT_ARG_TYPE_UW },
 		{ "S32",    SLJIT_ARG_TYPE_S32 },
@@ -1376,20 +1375,19 @@ l_declare(lua_State *L)
 	int narg = lua_gettop(L);
 	int val = 0;
 	
-	if (narg < 1 || narg > 5)
+	if (narg < 0 || narg > 4)
 		luaL_error(L, "sljit.declare() failed, too many arguments");
 	
 	switch (narg) {
-	case 5:
-		val |= SLJIT_DEF_ARG4(checkargtypes(L, 5));
 	case 4:
-		val |= SLJIT_DEF_ARG3(checkargtypes(L, 4));
+		val |= SLJIT_DEF_ARG4(checkargtypes(L, 4));
 	case 3:
-		val |= SLJIT_DEF_ARG2(checkargtypes(L, 3));
+		val |= SLJIT_DEF_ARG3(checkargtypes(L, 3));
 	case 2:
-		val |= SLJIT_DEF_ARG1(checkargtypes(L, 2));
+		val |= SLJIT_DEF_ARG2(checkargtypes(L, 2));
 	case 1:
-		val |= SLJIT_DEF_RET(checkargtypes(L, 1));
+		val |= SLJIT_DEF_ARG1(checkargtypes(L, 1));
+	case 0:
 		break;
 	default:
 		assert(0 && "sljit.declare: narg error");
