@@ -10,11 +10,11 @@ You need sljit (http://sljit.sourceforge.net/) and mk-configure
 It is recommended to use pkgsrc and install devel/mk-configure.
 The pkgsrc guide is available at http://www.netbsd.org/docs/pkgsrc/.
 
-The sljit code must be at revision r291 or newer:
+The sljit code must be at revision r383 or newer:
 
-	$ svn co https://svn.code.sf.net/p/sljit/code@r291 sljit
+	$ svn co https://svn.code.sf.net/p/sljit/code@r383 sljit
 
-	$ tar cf sljit-r291.tar sljit/
+	$ tar cf sljit-r383.tar sljit/
 
 Building
 --------
@@ -24,7 +24,7 @@ Extract sljit tarball to sljit/ subdirectory. Make sure you pass
 
 	$ cd sljit/
 
-	$ tar kxf /path/to/sljit-r291.tar
+	$ tar kxf /path/to/sljit-r383.tar
 
 Then you can build luaSljit with this command
 
